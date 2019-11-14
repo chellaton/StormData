@@ -31,8 +31,7 @@ aggStormData_Economic <- aggStormData_Economic[order(aggStormData_Economic$total
 
 aggStormData_Economic <- subset(aggStormData_Economic, totalDamage > quantile(aggStormData_Economic$totalDamage, .98))
 
-g1 <- ggplot(aggStormData_Fatality)
-g1 <- g+geom_point(mapping=aes(y=EVTYPE, x=FATALITIES))
+g1 <- ggplot(aggStormData_Fatality)+geom_point(mapping=aes(y=EVTYPE, x=FATALITIES))
 print(g1)
 
 g2 <- ggplot()+geom_point(aggStormData_Economic, mapping=aes(y=EVTYPE, x=totalDamage)) + ylab("")
