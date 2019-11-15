@@ -1,0 +1,94 @@
+---
+title: "StormData Analysis for US with Fatality and Property Damage"
+author: "R Chellaton"
+date: "11/13/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## R Markdown
+
+## Synopsis
+The analysis looks at fatality and property damage data collected for US from 1950 to 2011.  The information includes state, county, event dates, damage and fatality data, some event data, etc.
+From analysis of the data, tornadoes were responsible for most fatalities.
+
+### load libraries
+Load dplyr for data frame manipulation, ggplot2 for graphing, and gridExtra for paneling with ggplot2
+``` {r load libraries}
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+```
+### About the data file
+The file came from: https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2
+unzipped file is a CSV with 902,297 rows and 37 columns.  So, load using read.csv function.
+``` {r load data file}
+stormData <- read.csv("repdata-data-StormData.csv", stringsAsFactors = FALSE)
+#summary(stormData)
+```
+
+### Data Processing
+We are interested in fatality data - in column FATALITIES.  And need to summarize for US wide aggregation to find the event that has the highest fatality rate.
+Also, property damage data is split in 2 columns - PROPDMG and PROPDMGEXP.  PROPDMGEXP has value K or for a 1,000 (thousand) or 1,000,000 (million) multiplier.
+``` {r Select county & state plus event loss data and convert K/M to 1,000 or 1000,000}
+shortData <- stormData %>% select(6:8,23:28)
+shortData <- stormData %>% 
+  mutate(propDamage = case_when (
+                        PROPDMGEXP=='K' ~ PROPDMG*1000, 
+                        PROPDMGEXP=='M' ~ PROPDMG*1000000,
+                        PROPDMGEXP=='B' ~ PROPDMG*10^9,
+                        TRUE ~ PROPDMG),
+         cropDamage = case_when(
+                        CROPDMGEXP=='K' ~ CROPDMG*10^3,
+                        CROPDMGEXP=='M' ~ CROPDMG*10^6,
+                        CROPDMGEXP=='B' ~ CROPDMG*10^9,
+                        TRUE ~ CROPDMG),
+         totalDamage = propDamage + cropDamage)
+```
+Group by Event to get to aggregation.  Initial aggregation is for fatalities.  After aggregation, exclude events with zero fatalities, and sort by descending.  So, the event with highest fatality rate is the first element.
+``` {r group by Event, Aggregate Fatality by Event}
+summEVTYPE <- shortData %>% group_by(EVTYPE)
+
+aggStormData_Fatality <- aggregate(FATALITIES ~ EVTYPE, summEVTYPE, FUN=sum)
+aggStormData_Fatality <- subset(aggStormData_Fatality, FATALITIES > 0)
+aggStormData_Fatality <- aggStormData_Fatality[order(aggStormData_Fatality$FATALITIES, 
+                                                     decreasing=TRUE),]
+aggStormData_Fatality <- subset(aggStormData_Fatality, 
+                                FATALITIES > quantile(aggStormData_Fatality$FATALITIES,.95))
+
+```
+
+Next aggregation is for fatalities.  After aggregation, exclude events with zero loss, and sort by descending.  So, the event with highest economic loss rate is the first element.
+``` {r Aggregate Economic Loss by Event}
+aggStormData_Economic <- aggregate(totalDamage ~ EVTYPE, summEVTYPE, FUN=sum)
+aggStormData_Economic <- subset(aggStormData_Economic, totalDamage > 0)
+aggStormData_Economic <- aggStormData_Economic[order(aggStormData_Economic$totalDamage, 
+                                                     decreasing=TRUE),]
+
+aggStormData_Economic <- subset(aggStormData_Economic, 
+                                totalDamage > quantile(aggStormData_Economic$totalDamage, .98))
+
+```
+
+Here, we generate a plot to look at fatality rate for 95 percentile group of events with non-zero fatality count.
+``` {r plot Fatality data by Event for 95th percentile group}
+g1 <- ggplot(aggStormData_Fatality) + geom_point(mapping=aes(y=EVTYPE, x=FATALITIES), color='dark red') + 
+  ggtitle("Natural Disasters & Fatalities - US 1950 to 2013") + xlab("Number of Fatalities") + ylab("") 
+print(g1)
+```
+
+... And a plot to look at economic loss pattern for 98th percentile.
+``` {r plot economic loss by Event for 98th percentile}
+g2 <- ggplot() +
+  geom_point(aggStormData_Economic, mapping=aes(y=EVTYPE, x=totalDamage/1000000), color='dark green') + 
+  ylab("") + xlab("Economic Loss in Million $")
+print(g2)
+```
+
+### Results
+``` {r}
+print(paste("Event with highest economic loss: ", aggStormData_Economic$EVTYPE[1]))
+print(paste("Event with highest fatalities: ", aggStormData_Fatality$EVTYPE[1]))
+```
